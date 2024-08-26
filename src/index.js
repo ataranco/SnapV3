@@ -1,309 +1,335 @@
-import * as THREE from 'three'
 
-var scene;
-var pointGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-var pointMaterial = new THREE.MeshBasicMaterial( {color: 0x800080, transparent : true, wireframe : true} );       
-var playermesh = null;
-var points = [];
-var tolerance = 0;
-var raycaster = new THREE.Raycaster();
-var colliders;
-var camera;
-var posX = 0;
-var posY = 0;
+let events = {};
 
-export function init(_scene, _colliders, _camera){
-    scene = _scene;
-    colliders = _colliders;
-    camera = _camera;
-    document.body.addEventListener('pointermove', ((event) => { onDocumentMouseMove(event) }), false);
+export function init(){
+    
 }
 
-export function generateSnapPoint(objectSize){
-    let raycastHit = raycastPointToWorld();
-    console.log("raycastHit",raycastHit);
-    if(raycastHit != null){
-        let direction = new THREE.Vector3(0,0,0);
-        direction.copy(raycastHit.normal);
-        let left = new THREE.Vector3(-1,0,0);
-        let rigth = new THREE.Vector3(1,0,0);
-        let back = new THREE.Vector3(0,0,-1);
-        let front = new THREE.Vector3(0,0,1);
-        let up = new THREE.Vector3(0,1,0);
-        let down = new THREE.Vector3(0,-1,0);
+export function subscribe(_event, listener) {
+    if (!events[_event]) {
+       events[_event] = [];
+    }
+    events[_event].push(listener);
+}
 
-        let distance1 = direction.distanceTo(left);
-        let distance2 = direction.distanceTo(rigth);
-        let distance3 = direction.distanceTo(back);
-        let distance4 = direction.distanceTo(front);
-        let distance5 = direction.distanceTo(up);
-        let distance6 = direction.distanceTo(down);
-
-        let minDistance = Math.min(distance1, distance2, distance3, distance4, distance5, distance6);
-        let distances = [distance1, distance2, distance3, distance4, distance5, distance6];
-        let index = distances.indexOf(minDistance);
-        let directions = [left, rigth, back, front, up, down];
-
-        cleanSnap();
-        let invertedDirection = directions[index].clone().negate();
-        console.log("index",index);
-        if(index == 4){
-            generateFloorSnapPoint(raycastHit , objectSize, invertedDirection);
-        }else if(index != 5){                
-            generateWallSnapPoint(raycastHit , objectSize, index, invertedDirection);
-        }
+export function unsubscribe(_event, listener) {
+    if (events[_event]) {
+       events[_event] = events[_event].filter(existingListener => {
+          return existingListener !== listener;
+       });
     }
 }
 
-function generateFloorSnapPoint( raycastHit , objectSize, direction){  
-    if(raycastHit != null){
-        let point = new THREE.Vector3(0,0,0);
-        let sizeZ = objectSize.z/2;
-        point.copy(raycastHit.point);
-        point.y += objectSize.y / 2;
-        tolerance = objectSize.y / 2;
-        let distanceFront = getRayDistance(point.clone(), new THREE.Vector3(0,0,1));   
-        let distanceBack = getRayDistance(point.clone(), new THREE.Vector3(0,0,-1)); 
-
-        if(distanceFront == null){
-            distanceFront = 5;
-        }
-        if(distanceBack == null){
-            distanceBack = 5;
-        }
-
-        let pointFront = new THREE.Vector3(0,0,0);
-        let pointBack = new THREE.Vector3(0,0,0);
-        pointFront.copy(point);
-        pointBack.copy(point);
-        pointFront.z += distanceFront - sizeZ;
-        pointBack.z -= distanceBack - sizeZ;
-        interpolatePoints(point, pointFront, 0.5, 5, direction);       
-        interpolatePoints(point, pointBack, 0.5, 5, direction);             
-        let pointsLength = points.length;
-        for (let i = 0; i < pointsLength; i++) {   
-            let point_ = new THREE.Vector3(0,0,0);
-            point_.copy(points[i].position)
-            let distanceR = getRayDistance(point_, new THREE.Vector3(1,0,0));   
-            let distanceL = getRayDistance(point_, new THREE.Vector3(-1,0,0));   
-
-            if(distanceR == null){
-                distanceR = 5;
-            }  
-            if(distanceL == null){
-                distanceL = 5;
-            }   
-
-            let pointLeft_ = new THREE.Vector3(0,0,0);
-            let pointRight_ = new THREE.Vector3(0,0,0);                
-            pointLeft_.copy(point_);
-            pointRight_.copy(point_);
-            pointLeft_.x -=distanceL - objectSize.x/2;
-            pointRight_.x +=distanceR - objectSize.x/2;
-            interpolatePoints(point_, pointLeft_, 0.5, 5,direction);  
-            interpolatePoints(point_, pointRight_, 0.5, 5,direction);  
-        } 
-                
-    }  
-}
-
-function generateWallSnapPoint( raycastHit , objectSize, directionID, direction){ 
-    if(raycastHit != null){
-        let point = new THREE.Vector3(0,0,0);
-        point.copy(raycastHit.point);
-        switch(directionID){
-            case 0:
-                point.x -= objectSize.x / 2;
-                tolerance = objectSize.x / 2;
-            break;
-            case 1:
-                point.x += objectSize.x / 2;
-                tolerance = objectSize.x / 2;
-            break;
-            case 2:
-                point.z -= objectSize.z / 2;
-                tolerance = objectSize.z / 2;
-            break;
-            case 3:
-                point.z += objectSize.z / 2;
-                tolerance = objectSize.z / 2;
-            break;
-        }
-        let distanceUp = getRayDistance(point, new THREE.Vector3(0,1,0));   
-        let distanceDown = getRayDistance(point, new THREE.Vector3(0,-1,0)); 
-        console.log("distanceUp, distanceDown",distanceUp, distanceDown);
-        if(distanceUp == null){
-            distanceUp = 5;
-        } 
-        if(distanceDown == null){
-            distanceDown = 5;
-        } 
-        console.log("distanceUp2, distanceDown2",distanceUp, distanceDown);
-        let pointUp = new THREE.Vector3(0,0,0);
-        let pointDown = new THREE.Vector3(0,0,0);
-        pointUp.copy(point);
-        pointDown.copy(point);
-        pointUp.y += distanceUp - objectSize.y/2;            
-        pointDown.y -= distanceDown - objectSize.y/2;
-        console.log(directionID);
-        if(distanceUp) interpolatePoints(point, pointUp, 0.5, 5, direction);       
-        if(distanceDown) interpolatePoints(point, pointDown, 0.5, 5, direction);  
-        let pointsLength = points.length;
-        for (let i = 0; i < pointsLength; i++) {  
-            if(directionID < 2) {
-                let point = new THREE.Vector3(0,0,0);
-                point.copy(points[i].position)
-                let distanceF = getRayDistance(point, new THREE.Vector3(0,0,1));   
-                let distanceB = getRayDistance(point, new THREE.Vector3(0,0,-1)); 
-
-                if(distanceF == null){
-                    distanceF = 5;
-                }
-
-                if(distanceB == null){
-                    distanceB = 5;
-                }
-
-                let pointFront_ = new THREE.Vector3(0,0,0);
-                let pointBack_ = new THREE.Vector3(0,0,0);   
-                pointFront_.copy(point);
-                pointBack_.copy(point);
-                pointFront_.z +=distanceF - objectSize.z/2;
-                pointBack_.z -=distanceB - objectSize.z/2;   
-                console.log(point, pointFront_);           
-                console.log(point, pointBack_);      
-                interpolatePoints(point, pointFront_, 0.5, 5, direction);  
-                interpolatePoints(point, pointBack_, 0.5, 5, direction); 
-            }else{
-                let point = new THREE.Vector3(0,0,0);
-                point.copy(points[i].position)
-                let distanceR = getRayDistance(point, new THREE.Vector3(1,0,0));   
-                let distanceL = getRayDistance(point, new THREE.Vector3(-1,0,0));   
-                
-                if(distanceR == null){
-                    distanceR = 5;
-                }
-
-                if(distanceL == null){
-                    distanceL = 5;
-                }
-                
-                let pointLeft_ = new THREE.Vector3(0,0,0);
-                let pointRight_ = new THREE.Vector3(0,0,0);                
-                pointLeft_.copy(point);
-                pointRight_.copy(point);
-                pointLeft_.x -=distanceL - objectSize.x/2;
-                pointRight_.x +=distanceR - objectSize.x/2;
-                interpolatePoints(point, pointLeft_, 0.5, 5, direction);  
-                interpolatePoints(point, pointRight_, 0.5, 5, direction); 
-            }
-        }  
-                        
-    }  
-}
-
-function interpolatePoints(vectorA , vectorB , distance, radius, direction = null){
-    let distanc = distance;
-    let distanceTotal = vectorA.distanceTo(vectorB);
-    let steps = Math.floor(distanceTotal / distanc);
-
-    for (let i = 0; i <= steps; i++) {            
-        let t = (i * distanc) / distanceTotal;
-        let interpolatedPoint = new THREE.Vector3().lerpVectors(vectorA, vectorB, t);
-        if(vectorA.distanceTo(interpolatedPoint) < radius){
-            if(direction){
-                let distance = getRayDistance(interpolatedPoint, direction); 
-                if(distance) {
-                    if(distance <= tolerance + 0.05){
-                        points.push( createPoint(interpolatedPoint) );
-                    }                    
-                }                    
-            }else{
-                points.push( createPoint(interpolatedPoint) );
-            }            
-        }            
+export function emit(_event, data) {
+    if (events[_event]) {
+       events[_event].forEach(listener => {
+          listener(data);
+       });
     }
 }
 
-function getRayDistance(point, normal) {  
-    let pointRay = new THREE.Vector3(0,0,0);
-    let direction = new THREE.Vector3(0,0,0);
 
-    pointRay.copy(point);
-    direction.copy(normal);
+//////////////////////Host Buttons
 
-    let raycastHit = raycastPoint(pointRay,direction, );   
-    if(raycastHit == null){
-        return null;
-    }else{    
-        let distance = point.distanceTo(raycastHit.point);
-        return distance;
-    }
-}
+//Gather(list actorId, list position, adminPosition, lookPosition)
+/**
+ * Calculates the position of each actor in a circle and the look direction towards the adminPosition.
+ * @param {Array} actorList - List of actors with IDs.
+ * @param {Object} adminPosition - Position of the admin in format { x, y, z }.
+ * @returns {Array} - List of objects containing the position and look direction of each actor.
+ */
+export function gather(actorList, adminPosition) {
+    const actorListaux = convertObjectToArray(actorList);
+    const radius = 5; // Radius of the circle
+    const angleStep = (2 * Math.PI) / actorListaux.length;
 
-function createPoint(point){
-    if(playermesh == null){
-        playermesh = new THREE.Mesh(
-            pointGeometry,
-            pointMaterial
-        );
-    }       
-    let clone = playermesh.clone();
-    scene.add(clone);  
-    clone.position.copy(point);
-    return clone;
-}
-
-function cleanSnap() {
-    for (let i = 0; i < points.length; i++) {            
-        scene.remove(points[i]);        
-    }
-    points = [];
-}
-
-//HELPER FOR RAYCAST
-function raycastPoint(origin, direction) {
-    let raycastHit = null;
-    raycaster.set(origin, direction);
-    let intersects = raycaster.intersectObjects(colliders);
-
-    if (intersects.length > 0) {
-        raycastHit = {
-            point: intersects[0].point,
-            mesh: intersects[0].object,
-            normal: intersects[0].face.normal
+    return actorListaux.map((actor, index) => {
+        const angle = angleStep * index;
+        const position = calculatePosition(angle, radius, adminPosition);
+        const lookDirection = adminPosition;
+        
+        return {
+            id: actor.userId,
+            actorNr: actor.actorNr,
+            position,
+            lookDirection,
+            action:'gather'
         };
-    }    
-    return raycastHit;
+    });
+}
+/**
+ * Convierte un objeto de actores en un array de actores.
+ * @param {Object} actorObject - Objeto de actores.
+ * @returns {Array} - Array de actores.
+ */
+function convertObjectToArray(actorObject) {
+    return Object.values(actorObject);
+}
+/**
+ * Calculates the position of an actor in a circle based on an angle and radius.
+ * @param {number} angle - Angle in radians.
+ * @param {number} radius - Radius of the circle.
+ * @param {Object} adminPosition - Position of the admin in format { x, y, z }.
+ * @returns {Object} - Position of the actor in format { x, y, z }.
+ */
+function calculatePosition(angle, radius, adminPosition) {
+    return {
+        x: adminPosition.x + radius * Math.cos(angle),
+        y: adminPosition.y - adminPosition.y, // Keep y constant for 2D visualization
+        z: adminPosition.z + radius * Math.sin(angle)
+    };
 }
 
-function onDocumentMouseMove(event) {
-    event.preventDefault();
-
-    posX = (event.offsetX / document.body.clientWidth) * 2 - 1;
-    posY = -(event.offsetY / document.body.clientHeight) * 2 + 1;
+/**
+ * Calculates the look direction of an actor towards the adminPosition.
+ * @param {Object} position - Position of the actor in format { x, y, z }.
+ * @param {Object} adminPosition - Position of the admin in format { x, y, z }.
+ * @returns {Object} - Look direction in format { x, y, z }.
+ */
+function calculateLookDirection(position, adminPosition) {
+    return {
+        x: adminPosition.x - position.x,
+        y: adminPosition.y - position.y,
+        z: adminPosition.z - position.z
+    };
 }
 
-function raycastPointToWorld() {
-    let raycastHit = null;
-    let mousePos = new THREE.Vector2();
-    mousePos.x = posX;
-    mousePos.y = posY;
-    
-    camera.updateMatrixWorld();
-    raycaster.setFromCamera(mousePos.clone(), camera);
+/**
+ * Calculates the position of each actor in a star pattern.
+ * @param {number} index - Index of the actor.
+ * @param {number} total - Total number of actors.
+ * @param {number} radius - Radius of the star.
+ * @param {Object} adminPosition - Position of the admin in format { x, y, z }.
+ * @returns {Object} - Position of the actor.
+ */
+function calculateStarPosition(index, total, radius, adminPosition) {
+    const points = 10; // Number of points in the star
+    const angle = (index % points) * (2 * Math.PI / points) - Math.PI / 2;
+    const innerRadius = radius / 2; // Inner radius of the star
 
-    
-    
-    let intersects = raycaster.intersectObjects(colliders);
-    
+    // Alternate between outer and inner radius
+    const currentRadius = index % 2 === 0 ? radius : innerRadius;
 
-    if (intersects.length > 0) {
-        raycastHit = {
-            point: intersects[0].point,
-            mesh: intersects[0].object,
-            normal: intersects[0].face.normal
+    return {
+        x: adminPosition.x + currentRadius * Math.cos(angle),
+        y: adminPosition.y,
+        z: adminPosition.z + currentRadius * Math.sin(angle)
+    };
+}
+/**
+ * Calculates the position of each actor in a circular pattern.
+ * @param {number} index - Index of the actor.
+ * @param {number} total - Total number of actors.
+ * @param {number} radius - Radius of the circle.
+ * @param {Object} adminPosition - Position of the admin in format { x, y, z }.
+ * @returns {Object} - Position of the actor.
+ */
+function calculateCircularPosition(index, total, radius, adminPosition) {
+    const angle = index * (2 * Math.PI / total);
+    return {
+        x: adminPosition.x + radius * Math.cos(angle),
+        y: adminPosition.y,
+        z: adminPosition.z + radius * Math.sin(angle)
+    };
+}
+
+/**
+ * Calculates the position of each actor in a square pattern.
+ * @param {number} index - Index of the actor.
+ * @param {number} total - Total number of actors.
+ * @param {number} sideLength - Length of the side of the square.
+ * @param {Object} adminPosition - Position of the admin in format { x, y, z }.
+ * @returns {Object} - Position of the actor.
+ */
+function calculateSquarePosition(index, total, sideLength, adminPosition) {
+    const corners = [
+        { x: adminPosition.x - sideLength / 2, y: adminPosition.y, z: adminPosition.z - sideLength / 2 }, // Top-left
+        { x: adminPosition.x + sideLength / 2, y: adminPosition.y, z: adminPosition.z - sideLength / 2 }, // Top-right
+        { x: adminPosition.x + sideLength / 2, y: adminPosition.y, z: adminPosition.z + sideLength / 2 }, // Bottom-right
+        { x: adminPosition.x - sideLength / 2, y: adminPosition.y, z: adminPosition.z + sideLength / 2 }  // Bottom-left
+    ];
+
+    if (index < 4) {
+        return corners[index];
+    }
+
+    const actorsPerSide = Math.ceil((total - 4) / 4);
+    const side = Math.floor((index - 4) / actorsPerSide);
+    const positionInSide = (index - 4) % actorsPerSide;
+    const segment = sideLength / (actorsPerSide + 1);
+    const offset = (positionInSide + 1) * segment;
+
+    let x, z;
+
+    switch (side) {
+        case 0: // Top side (from left to right)
+            x = adminPosition.x - sideLength / 2 + offset;
+            z = adminPosition.z - sideLength / 2;
+            break;
+        case 1: // Right side (from top to bottom)
+            x = adminPosition.x + sideLength / 2;
+            z = adminPosition.z - sideLength / 2 + offset;
+            break;
+        case 2: // Bottom side (from right to left)
+            x = adminPosition.x + sideLength / 2 - offset;
+            z = adminPosition.z + sideLength / 2;
+            break;
+        case 3: // Left side (from bottom to top)
+            x = adminPosition.x - sideLength / 2;
+            z = adminPosition.z + sideLength / 2 - offset;
+            break;
+    }
+
+    return {
+        x: x,
+        y: adminPosition.y,
+        z: z
+    };
+}
+
+/**
+ * Generates positions and look directions for actors based on the specified pattern.
+ * @param {string} pattern - The pattern type ('star', 'circular', 'square').
+ * @param {Array} actorList - List of actors with IDs.
+ * @param {Object} adminPosition - Position of the admin in format { x, y, z }.
+ * @returns {Array} - List of objects containing the position and look direction of each actor.
+ */
+export function Pattern(actorList, patternType,adminPosition) {
+    const radius = 100;
+    const sideLength = 200;
+    const total = actorList.length;
+
+    return actorList.map((actor, index) => {
+        let position;
+        switch (patternType) {
+            case 'star':
+                position = calculateStarPosition(index, total, radius, adminPosition);
+                break;
+            case 'circular':
+                position = calculateCircularPosition(index, total, radius, adminPosition);
+                break;
+            case 'square':
+                position = calculateSquarePosition(index, total, sideLength, adminPosition);
+                break;
+            default:
+                throw new Error('Invalid pattern type');
+        }
+        const lookDirection = adminPosition;
+        return {
+            id: actor.id,
+            position,
+            lookDirection
         };
-    }    
-    return raycastHit;
+    });
+}
+
+//Look(list actorId, positionLook)
+//esta funcion de abajo deberia recibir actorposition
+export function Look(actorList, positionLook) {
+    return actorList.map((actor) => {
+        const position = actor.position;
+        const lookDirection = calculateLookDirection(position, positionLook);     
+        return {
+            id: actor.id,
+            position,
+            lookDirection
+        };
+    });
+}
+
+//Orbit(list actorId, objectOrbit)
+export function Orbit(actorId, objectOrbit) {
+    emit("Orbit",{
+        actorId: actorId,
+        objectOrbit: objectOrbit,
+    });
+}
+
+//FollowMe(list actorId, adminId)
+export function FollowMe(actorId, adminId) {
+    emit("FollowMe",{
+        actorId: actorId,
+        adminId: adminId,
+    });
+}
+
+//Freeze(list actorId, bool camera, bool position)
+export function Freeze(actorId, camera, position) {
+    emit("Freeze",{
+        actorId: actorId,
+        camera: camera,
+        position: position
+    });
+}
+
+//UnFreeze(list actorId, bool camera, bool position)
+export function UnFreeze(actorId, camera, position) {
+    emit("UnFreeze",{
+        actorId: actorId,
+        camera: camera,
+        position: position
+    });
+}
+
+
+//GoToScene(sceneId)
+export function GoToScene(sceneId) {
+    emit("GoToScene",{
+        sceneId: sceneId
+    });
+}
+
+
+//////////////////////On received
+
+//onGather(list actorId, list position, adminPosition, lookPosition)
+export function onGather( position, lookPosition) {
+    emit("onGather",{
+        position: position,
+        lookPosition: lookPosition
+    });
+}
+
+//onLook(list actorId, positionLook)
+export function onLook( positionLook) {
+    emit("onLook",{
+        positionLook: positionLook,
+    });
+}
+
+//onOrbit(list actorId, objectOrbit)
+export function onOrbit( objectOrbit) {
+    emit("onOrbit",{
+        objectOrbit: objectOrbit,
+    });
+}
+
+//onFollowMe(list actorId, adminId)
+export function onFollowMe(followId) {
+    emit("onFollowMe",{
+        followId: followId,
+    });
+}
+
+//onFreeze(list actorId, bool camera, bool position)
+export function onFreeze(camera, position) {
+    emit("onFreeze",{
+        camera: camera,
+        position: position
+    });
+}
+//onUnFreeze(list actorId, bool camera, bool position)
+export function onUnFreeze(camera, position) {
+    emit("onUnFreeze",{
+        camera: camera,
+        position: position
+    });
+}
+
+
+//onGoToScene(sceneId)
+export function onGoToScene(sceneId) {
+    emit("onGoToScene",{
+        sceneId: sceneId
+    });
 }
