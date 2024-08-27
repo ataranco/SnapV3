@@ -1,6 +1,11 @@
 
 let events = {};
 
+let actions = {
+    LOOK: 'look',
+    GATHER: 'gather',
+};
+
 export function init(){
     
 }
@@ -226,15 +231,26 @@ export function Pattern(actorList, patternType,adminPosition) {
 //Look(list actorId, positionLook)
 //esta funcion de abajo deberia recibir actorposition
 export function Look(actorList, positionLook) {
-    return actorList.map((actor) => {
-        const position = actor.position;
-        const lookDirection = calculateLookDirection(position, positionLook);     
-        return {
-            id: actor.id,
-            position,
-            lookDirection
+    let actors = [];
+    for (let i = 0; i < actorList.length; i++) {
+
+        let parameters = {
+            positionLook: positionLook
         };
+
+        let actor = {
+            action: actions.LOOK,
+            id: actorList[i].id,
+            parameters: parameters
+        };
+        actors.push(actor);
+    }
+
+    emit("sendActionToNetwork",{
+        actors
     });
+
+    return actors;
 }
 
 //Orbit(list actorId, objectOrbit)
@@ -290,13 +306,6 @@ export function onGather( position, lookPosition) {
     });
 }
 
-//onLook(list actorId, positionLook)
-export function onLook( positionLook) {
-    emit("onLook",{
-        positionLook: positionLook,
-    });
-}
-
 //onOrbit(list actorId, objectOrbit)
 export function onOrbit( objectOrbit) {
     emit("onOrbit",{
@@ -332,4 +341,20 @@ export function onGoToScene(sceneId) {
     emit("onGoToScene",{
         sceneId: sceneId
     });
+}
+
+//onLook(list actorId, positionLook)
+export function onLook( positionLook) {
+    emit("onLook",{
+        positionLook: positionLook,
+    });
+}
+
+export function onHostActions(action, parameters) {
+    console.log("action",action);
+    switch(action){
+        case actions.LOOK:
+            onLook(parameters.positionLook);
+        break;
+    }
 }
