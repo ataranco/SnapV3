@@ -1,9 +1,11 @@
 
+
 let events = {};
 
 let actions = {
-    LOOK: 'look',
-    GATHER: 'gather',
+    LOOK: 'Look',
+    GATHER: 'Gather',
+    COME_HERE: 'ComeHere'
 };
 
 export function init(){
@@ -231,6 +233,7 @@ export function Pattern(actorList, patternType,adminPosition) {
 //Look(list actorId, positionLook)
 //esta funcion de abajo deberia recibir actorposition
 export function Look(actorList, positionLook) {
+    console.log("positionLook",positionLook);
     let actors = [];
     for (let i = 0; i < actorList.length; i++) {
 
@@ -295,66 +298,33 @@ export function GoToScene(sceneId) {
     });
 }
 
+export function comeHere(actorList, pointBetween) {
+    let actors = [];
+    for (let i = 0; i < actorList.length; i++) {
 
-//////////////////////On received
+        let parameters = {
+            position: pointBetween
+        };
 
-//onGather(list actorId, list position, adminPosition, lookPosition)
-export function onGather( position, lookPosition) {
-    emit("onGather",{
-        position: position,
-        lookPosition: lookPosition
+        let actor = {
+            action: actions.COME_HERE,
+            id: actorList[i].id,
+            parameters: parameters
+        };
+        actors.push(actor);
+    }
+
+    emit("sendActionToNetwork",{
+        actors
     });
-}
 
-//onOrbit(list actorId, objectOrbit)
-export function onOrbit( objectOrbit) {
-    emit("onOrbit",{
-        objectOrbit: objectOrbit,
-    });
-}
-
-//onFollowMe(list actorId, adminId)
-export function onFollowMe(followId) {
-    emit("onFollowMe",{
-        followId: followId,
-    });
-}
-
-//onFreeze(list actorId, bool camera, bool position)
-export function onFreeze(camera, position) {
-    emit("onFreeze",{
-        camera: camera,
-        position: position
-    });
-}
-//onUnFreeze(list actorId, bool camera, bool position)
-export function onUnFreeze(camera, position) {
-    emit("onUnFreeze",{
-        camera: camera,
-        position: position
-    });
-}
-
-
-//onGoToScene(sceneId)
-export function onGoToScene(sceneId) {
-    emit("onGoToScene",{
-        sceneId: sceneId
-    });
-}
-
-//onLook(list actorId, positionLook)
-export function onLook( positionLook) {
-    emit("onLook",{
-        positionLook: positionLook,
-    });
+    return actors;
 }
 
 export function onHostActions(action, parameters) {
     console.log("action",action);
-    switch(action){
-        case actions.LOOK:
-            onLook(parameters.positionLook);
-        break;
-    }
+
+    emit("on"+action,{
+        parameters: parameters,
+    });
 }
